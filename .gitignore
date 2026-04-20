@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+
+# Electron packaged output
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Env / secrets (절대 커밋 금지)
+.env
+.env.local
+*.env
+
+# Config with API keys (런타임 생성, 커밋 불필요)
+# userData의 config.json은 소스 외부에 있으므로 해당 없음
