@@ -37,6 +37,13 @@
   "build": {
     "appId": "com.yngtool.app",
     "productName": "YngTool",
+    "files": [
+      "build/**/*",
+      "src/main/**/*"
+    ],
+    "extraMetadata": {
+      "main": "src/main/main.js"
+    },
     "win": {
       "target": "nsis",
       "icon": "public/icon.ico"
