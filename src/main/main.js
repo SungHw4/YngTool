@@ -46,7 +46,7 @@ ipcMain.on('window-maximize', () => {
 ipcMain.on('window-close', () => mainWindow.close())
 
 // ─── IPC: SVN ────────────────────────────────────────────────────
-const { execSync, exec } = require('child_process')
+const { execSync, exec, execFile } = require('child_process')
 
 ipcMain.handle('svn:log', async (_, { repoPath, limit = 20 }) => {
   return new Promise((resolve) => {
@@ -91,13 +91,12 @@ function parseSvnXml(xml) {
 // ─── IPC: Git ────────────────────────────────────────────────────
 ipcMain.handle('git:log', async (_, { repoPath, limit = 20 }) => {
   return new Promise((resolve) => {
-    const fmt = '--pretty=format:%H|%an|%ae|%ai|%s'
-    const cmd = `git -C "${repoPath}" log ${fmt} -n ${limit}`
-    exec(cmd, { encoding: 'utf8' }, (err, stdout) => {
+    const fmt = '--pretty=format:%H\x1f%an\x1f%ae\x1f%ai\x1f%s'
+    execFile('git', ['-C', repoPath, 'log', fmt, `-n`, String(limit)], { encoding: 'utf8' }, (err, stdout) => {
       if (err) return resolve({ error: err.message, items: [] })
       const items = stdout.trim().split('\n').filter(Boolean).map(line => {
-        const [hash, author, email, date, ...msgParts] = line.split('|')
-        return { hash: hash?.slice(0, 7), author, email, date, message: msgParts.join('|'), type: 'git' }
+        const [hash, author, email, date, ...msgParts] = line.split('\x1f')
+        return { hash: hash?.slice(0, 7), author, email, date, message: msgParts.join('\x1f'), type: 'git' }
       })
       resolve({ items })
     })
@@ -106,8 +105,7 @@ ipcMain.handle('git:log', async (_, { repoPath, limit = 20 }) => {
 
 ipcMain.handle('git:diff', async (_, { repoPath, hash }) => {
   return new Promise((resolve) => {
-    const cmd = `git -C "${repoPath}" show ${hash} --stat`
-    exec(cmd, { encoding: 'utf8' }, (err, stdout) => {
+    execFile('git', ['-C', repoPath, 'show', hash, '--stat'], { encoding: 'utf8' }, (err, stdout) => {
       if (err) return resolve({ error: err.message, diff: '' })
       resolve({ diff: stdout })
     })
