@@ -44,18 +44,24 @@ async function fetchOpenAIUsage(apiKey) {
   if (!apiKey) return null
   try {
     const now = new Date()
-    const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startTime = Math.floor(startOfMonth.getTime() / 1000)
+    const endTime   = Math.floor(now.getTime() / 1000)
     const res = await fetch(
-      `https://api.openai.com/v1/usage?date=${date}`,
+      `https://api.openai.com/v1/organization/usage/completions?start_time=${startTime}&end_time=${endTime}&limit=100`,
       { headers: { Authorization: `Bearer ${apiKey}` } }
     )
     if (!res.ok) return null
     const data = await res.json()
-    let total = 0
+    let totalInput = 0, totalOutput = 0
     for (const entry of data.data || []) {
-      total += (entry.n_context_tokens_total || 0) + (entry.n_generated_tokens_total || 0)
+      const results = entry.results || []
+      for (const r of results) {
+        totalInput  += r.input_tokens  || 0
+        totalOutput += r.output_tokens || 0
+      }
     }
-    return { total }
+    return { total: totalInput + totalOutput, totalInput, totalOutput }
   } catch {
     return null
   }
@@ -176,10 +182,18 @@ export default function TokenUsagePanel() {
         <div style={s.section}>
           <div style={s.sectionTitle}>OpenAI</div>
           {openai ? (
-            <div style={s.totalRow}>
-              <span style={s.totalLabel}>오늘 토큰</span>
-              <span style={s.totalVal}>{fmtNum(openai.total)}</span>
-            </div>
+            <>
+              <div style={s.totalRow}>
+                <span style={s.totalLabel}>총 토큰</span>
+                <span style={s.totalVal}>{fmtNum(openai.total)}</span>
+              </div>
+              <div style={s.subRow}>
+                <span style={s.subLabel}>입력</span>
+                <span style={s.subVal}>{fmtNum(openai.totalInput)}</span>
+                <span style={s.subLabel}>출력</span>
+                <span style={s.subVal}>{fmtNum(openai.totalOutput)}</span>
+              </div>
+            </>
           ) : (
             <p style={s.err}>{loading ? '조회 중...' : 'Usage API 조회 실패'}</p>
           )}
