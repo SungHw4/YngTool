@@ -131,6 +131,43 @@ ipcMain.handle('connection:check', async (_, { url, timeout = 3000 }) => {
   })
 })
 
+// ─── IPC: Anthropic Usage ────────────────────────────────────────
+ipcMain.handle('anthropic:usage', async (_, { apiKey }) => {
+  return new Promise((resolve) => {
+    try {
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const start = startOfMonth.toISOString().split('T')[0]
+      const end = now.toISOString().split('T')[0]
+      const options = {
+        hostname: 'api.anthropic.com',
+        path: `/v1/usage?start_date=${start}&end_date=${end}`,
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      }
+      const req = https.request(options, (res) => {
+        let body = ''
+        res.on('data', chunk => body += chunk)
+        res.on('end', () => {
+          try {
+            if (res.statusCode !== 200) return resolve({ error: `HTTP ${res.statusCode}` })
+            resolve({ data: JSON.parse(body) })
+          } catch {
+            resolve({ error: 'parse error' })
+          }
+        })
+      })
+      req.on('error', (e) => resolve({ error: e.message }))
+      req.end()
+    } catch (e) {
+      resolve({ error: e.message })
+    }
+  })
+})
+
 // ─── IPC: 설정 저장/로드 ─────────────────────────────────────────
 const fs = require('fs')
 const configPath = path.join(app.getPath('userData'), 'config.json')

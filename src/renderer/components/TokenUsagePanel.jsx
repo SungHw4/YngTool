@@ -1,31 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useApp } from '../store/AppContext'
 
-// Anthropic Usage API
+// Anthropic Usage API (main 프로세스 경유 - CORS 우회)
 async function fetchAnthropicUsage(apiKey) {
   if (!apiKey) return null
   try {
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const start = startOfMonth.toISOString().split('T')[0]
-    const end = now.toISOString().split('T')[0]
-
-    const res = await fetch(
-      `https://api.anthropic.com/v1/usage?start_date=${start}&end_date=${end}`,
-      {
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-      }
-    )
-    if (!res.ok) return null
-    const data = await res.json()
-
-    // 모델별 집계
+    const result = await window.electronAPI.anthropicUsage({ apiKey })
+    if (result.error || !result.data) return null
     const byModel = {}
     let totalInput = 0, totalOutput = 0
-    for (const entry of data.data || []) {
+    for (const entry of result.data.data || []) {
       const model = entry.model || 'unknown'
       if (!byModel[model]) byModel[model] = { input: 0, output: 0 }
       byModel[model].input  += entry.input_tokens  || 0

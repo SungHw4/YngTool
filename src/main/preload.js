@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 연결 상태
   checkConnection: (opts) => ipcRenderer.invoke('connection:check', opts),
 
+  // AI Usage
+  anthropicUsage: (opts) => ipcRenderer.invoke('anthropic:usage', opts),
+
   // 설정
   loadConfig: ()       => ipcRenderer.invoke('config:load'),
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
