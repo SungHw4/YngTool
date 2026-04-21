@@ -65,7 +65,7 @@ ipcMain.handle('svn:log', async (_, { repoPath, limit = 20 }) => {
 
 ipcMain.handle('svn:check', async () => {
   try {
-    execSync('svn --version --quiet', { encoding: 'utf8' })
+    execSync('svn --version --quiet', { encoding: 'utf8', stdio: 'pipe' })
     return { available: true }
   } catch {
     return { available: false }
@@ -193,8 +193,8 @@ function getDefaultConfig() {
   return {
     mantis: { baseUrl: '', apiToken: '', enabled: false },
     jira: { baseUrl: '', email: '', apiToken: '', enabled: false },
-    svn: { repoPaths: [], enabled: true },
-    git: { repoPaths: [], enabled: true },
+    svn: { repoPaths: [], enabled: false },
+    git: { repoPaths: [], enabled: false },
     ai: { anthropicKey: '', openaiKey: '' },
     general: { pollIntervalMinutes: 5, theme: 'dark' },
   }
