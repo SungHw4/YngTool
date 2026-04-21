@@ -48,7 +48,7 @@ async function fetchOpenAIUsage(apiKey) {
     const startTime = Math.floor(startOfMonth.getTime() / 1000)
     const endTime   = Math.floor(now.getTime() / 1000)
     const res = await fetch(
-      `https://api.openai.com/v1/organization/usage/completions?start_time=${startTime}&end_time=${endTime}&limit=100`,
+      `https://api.openai.com/v1/organization/usage/completions?start_time=${startTime}&end_time=${endTime}&limit=31`,
       { headers: { Authorization: `Bearer ${apiKey}` } }
     )
     if (!res.ok) {
