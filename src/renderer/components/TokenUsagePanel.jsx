@@ -51,7 +51,11 @@ async function fetchOpenAIUsage(apiKey) {
       `https://api.openai.com/v1/organization/usage/completions?start_time=${startTime}&end_time=${endTime}&limit=100`,
       { headers: { Authorization: `Bearer ${apiKey}` } }
     )
-    if (!res.ok) return null
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      console.error('[OpenAI Usage] HTTP', res.status, err)
+      return null
+    }
     const data = await res.json()
     let totalInput = 0, totalOutput = 0
     for (const entry of data.data || []) {
@@ -62,7 +66,8 @@ async function fetchOpenAIUsage(apiKey) {
       }
     }
     return { total: totalInput + totalOutput, totalInput, totalOutput }
-  } catch {
+  } catch (e) {
+    console.error('[OpenAI Usage] fetch error', e)
     return null
   }
 }
