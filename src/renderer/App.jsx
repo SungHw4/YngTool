@@ -8,6 +8,7 @@ import CodeReviewModal from './components/CodeReviewModal'
 import SettingsPage from './pages/SettingsPage'
 import SchedulePage from './pages/SchedulePage'
 import WeeklySummaryPage from './pages/WeeklySummaryPage'
+import NotificationPanel from './components/NotificationPanel'
 
 // ─── 상수 ─────────────────────────────────────────────────────────
 const SNAP_THRESHOLD = 14   // px — 이 거리 이내면 스냅
@@ -86,13 +87,14 @@ const PANEL_META = {
 }
 
 const NAV_ITEMS = [
-  { id: 'commits',  ...PANEL_META.commits },
-  { id: 'issues',   ...PANEL_META.issues  },
-  { id: 'tokens',   ...PANEL_META.tokens  },
-  { id: 'status',   ...PANEL_META.status  },
-  { id: 'schedule', icon: '▦', label: '일정표',    page: true },
-  { id: 'summary',  icon: '☰', label: '주간 요약', page: true },
-  { id: 'settings', icon: '⚙', label: '설정',      page: true, bottom: true },
+  { id: 'commits',       ...PANEL_META.commits },
+  { id: 'issues',        ...PANEL_META.issues  },
+  { id: 'tokens',        ...PANEL_META.tokens  },
+  { id: 'status',        ...PANEL_META.status  },
+  { id: 'schedule',      icon: '▦', label: '일정표',    page: true },
+  { id: 'summary',       icon: '☰', label: '주간 요약', page: true },
+  { id: 'notifications', icon: '◉', label: '알림',      page: true },
+  { id: 'settings',      icon: '⚙', label: '설정',      page: true, bottom: true },
 ]
 
 const DEFAULT_PANELS = [
@@ -406,7 +408,7 @@ function DashboardCanvas({ onReady, onPanelIdsChange }) {
 }
 
 // ─── 사이드바 ──────────────────────────────────────────────────────
-const Sidebar = memo(function Sidebar({ activePage, setActivePage, openPanelIds, onOpenPanel }) {
+const Sidebar = memo(function Sidebar({ activePage, setActivePage, openPanelIds, onOpenPanel, unreadCount }) {
   const topItems = NAV_ITEMS.filter(n => !n.bottom)
   const botItems = NAV_ITEMS.filter(n => n.bottom)
 
@@ -453,6 +455,19 @@ const Sidebar = memo(function Sidebar({ activePage, setActivePage, openPanelIds,
         <span style={{ ...styles.navLabel, color: isActive ? '#9ec' : '#8a9ab0' }}>
           {item.label}
         </span>
+        {/* 알림 배지 */}
+        {item.id === 'notifications' && unreadCount > 0 && (
+          <span style={{
+            marginLeft: 'auto',
+            background: '#e05050', color: '#fff',
+            fontSize: 9, fontWeight: 700,
+            minWidth: 16, height: 16, borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 4px',
+          }}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
         {/* 열려있는 패널 표시 점 */}
         {isOpen && (
           <span style={{
@@ -520,6 +535,7 @@ const TitleBar = memo(function TitleBar() {
 
 // ─── 메인 앱 ─────────────────────────────────────────────────────
 function AppShell() {
+  const { state } = useApp()
   const [activePage,   setActivePage  ] = useState(null)
   const [openPanelIds, setOpenPanelIds] = useState(DEFAULT_PANELS.map(p => p.id))
 
@@ -530,9 +546,10 @@ function AppShell() {
 
   const renderMain = () => {
     switch (activePage) {
-      case 'schedule': return <SchedulePage />
-      case 'summary':  return <WeeklySummaryPage />
-      case 'settings': return <SettingsPage />
+      case 'schedule':      return <SchedulePage />
+      case 'summary':       return <WeeklySummaryPage />
+      case 'settings':      return <SettingsPage />
+      case 'notifications': return <NotificationPanel />
       default:
         return (
           <DashboardCanvas
@@ -552,6 +569,7 @@ function AppShell() {
           setActivePage={setActivePage}
           openPanelIds={openPanelIds}
           onOpenPanel={handleOpenPanel}
+          unreadCount={state.notifications.unreadCount}
         />
         <main style={styles.main}>
           {renderMain()}

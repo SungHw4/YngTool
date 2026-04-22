@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI Usage
   anthropicUsage: (opts) => ipcRenderer.invoke('anthropic:usage', opts),
 
+  // 알림
+  loadNotifications:  ()     => ipcRenderer.invoke('notifications:load'),
+  saveNotifications:  (data) => ipcRenderer.invoke('notifications:save', data),
+  sendToast:          (opts) => ipcRenderer.invoke('notification:toast', opts),
+
   // 설정
   loadConfig: ()       => ipcRenderer.invoke('config:load'),
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),

@@ -199,3 +199,38 @@ function getDefaultConfig() {
     general: { pollIntervalMinutes: 5, theme: 'dark' },
   }
 }
+
+// ─── IPC: 알림 저장/로드 ─────────────────────────────────────────
+const notifPath = path.join(app.getPath('userData'), 'notifications.json')
+
+ipcMain.handle('notifications:load', async () => {
+  try {
+    if (!fs.existsSync(notifPath)) return { items: [], jiraSnapshot: {}, notifiedSchedules: [] }
+    return JSON.parse(fs.readFileSync(notifPath, 'utf8'))
+  } catch {
+    return { items: [], jiraSnapshot: {}, notifiedSchedules: [] }
+  }
+})
+
+ipcMain.handle('notifications:save', async (_, data) => {
+  try {
+    fs.writeFileSync(notifPath, JSON.stringify(data, null, 2), 'utf8')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
+
+// ─── IPC: Windows 토스트 알림 ────────────────────────────────────
+const { Notification } = require('electron')
+
+ipcMain.handle('notification:toast', async (_, { title, body }) => {
+  try {
+    if (Notification.isSupported()) {
+      new Notification({ title, body, silent: false }).show()
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
