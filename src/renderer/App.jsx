@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, memo, createContext, useContext } from 'react'
 import { AppProvider, useApp } from './store/AppContext'
 import CommitPanel from './components/CommitPanel'
 import IssuePanel from './components/IssuePanel'
@@ -10,6 +10,10 @@ import SchedulePage from './pages/SchedulePage'
 import WeeklySummaryPage from './pages/WeeklySummaryPage'
 import NotificationPanel from './components/NotificationPanel'
 import GmailPanel from './components/GmailPanel'
+import GmailPreviewPanel from './components/GmailPreviewPanel'
+
+// 패널에서 페이지 이동에 사용할 Context
+export const NavContext = createContext(null)
 
 // ─── 상수 ─────────────────────────────────────────────────────────
 const SNAP_THRESHOLD = 14   // px — 이 거리 이내면 스냅
@@ -81,17 +85,19 @@ function computeSnap(rawX, rawY, w, h, canvasEl, others) {
 
 // ─── 패널 메타데이터 ──────────────────────────────────────────────
 const PANEL_META = {
-  commits: { icon: '⎇', label: '커밋 로그',  hint: '우클릭 → AI 코드 리뷰' },
-  issues:  { icon: '◈', label: '이슈',        hint: '' },
-  tokens:  { icon: '◉', label: 'AI 사용량',  hint: '' },
-  status:  { icon: '◎', label: '연결 상태',  hint: '' },
+  commits:       { icon: '⎇', label: '커밋 로그',      hint: '우클릭 → AI 코드 리뷰' },
+  issues:        { icon: '◈', label: '이슈',            hint: '' },
+  tokens:        { icon: '◉', label: 'AI 사용량',      hint: '' },
+  status:        { icon: '◎', label: '연결 상태',      hint: '' },
+  'gmail-preview': { icon: '✉', label: 'Gmail 미리보기', hint: '클릭 → Gmail 탭 이동' },
 }
 
 const NAV_ITEMS = [
-  { id: 'commits',       ...PANEL_META.commits },
-  { id: 'issues',        ...PANEL_META.issues  },
-  { id: 'tokens',        ...PANEL_META.tokens  },
-  { id: 'status',        ...PANEL_META.status  },
+  { id: 'commits',         ...PANEL_META.commits          },
+  { id: 'issues',          ...PANEL_META.issues           },
+  { id: 'tokens',          ...PANEL_META.tokens           },
+  { id: 'status',          ...PANEL_META.status           },
+  { id: 'gmail-preview',   ...PANEL_META['gmail-preview'] },
   { id: 'schedule',      icon: '▦', label: '일정표',    page: true },
   { id: 'summary',       icon: '☰', label: '주간 요약', page: true },
   { id: 'notifications', icon: '◉', label: '알림',  page: true },
@@ -109,10 +115,11 @@ const DEFAULT_PANELS = [
 // 패널 컨텐츠 — React.memo로 위치 변경 시 리마운트 방지
 const PanelContent = memo(function PanelContent({ id }) {
   switch (id) {
-    case 'commits': return <CommitPanel />
-    case 'issues':  return <IssuePanel />
-    case 'tokens':  return <TokenUsagePanel />
-    case 'status':  return <StatusPanel />
+    case 'commits':       return <CommitPanel />
+    case 'issues':        return <IssuePanel />
+    case 'tokens':        return <TokenUsagePanel />
+    case 'status':        return <StatusPanel />
+    case 'gmail-preview': return <GmailPreviewPanel />
     default: return null
   }
 })
@@ -595,22 +602,24 @@ function AppShell() {
   }
 
   return (
-    <div style={styles.shell}>
-      <TitleBar />
-      <div style={styles.body}>
-        <Sidebar
-          activePage={activePage}
-          setActivePage={setActivePage}
-          openPanelIds={openPanelIds}
-          onOpenPanel={handleOpenPanel}
-          unreadCount={state.notifications.unreadCount}
-        />
-        <main style={styles.main}>
-          {renderMain()}
-        </main>
+    <NavContext.Provider value={{ setActivePage }}>
+      <div style={styles.shell}>
+        <TitleBar />
+        <div style={styles.body}>
+          <Sidebar
+            activePage={activePage}
+            setActivePage={setActivePage}
+            openPanelIds={openPanelIds}
+            onOpenPanel={handleOpenPanel}
+            unreadCount={state.notifications.unreadCount}
+          />
+          <main style={styles.main}>
+            {renderMain()}
+          </main>
+        </div>
+        <CodeReviewModal />
       </div>
-      <CodeReviewModal />
-    </div>
+    </NavContext.Provider>
   )
 }
 

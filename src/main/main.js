@@ -403,11 +403,12 @@ ipcMain.handle('gmail:fetch-messages', async (_, { accessToken, maxResults = 20 
 
     const ids = (listRes.data.messages || []).map(m => m.id)
     const fields = 'id,snippet,labelIds,payload(headers)'
-    const metaHeaders = 'Subject,From,Date'
+    // metadataHeaders는 파라미터를 반복해야 함 (콤마 구분 X)
+    const metaHeadersParam = 'metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date'
 
     const items = (await Promise.all(ids.map(id =>
       gmailApiGet(
-        `messages/${id}?format=metadata&metadataHeaders=${encodeURIComponent(metaHeaders)}&fields=${encodeURIComponent(fields)}`,
+        `messages/${id}?format=metadata&${metaHeadersParam}&fields=${encodeURIComponent(fields)}`,
         accessToken
       )
     ))).map(r => {

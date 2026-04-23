@@ -63,11 +63,17 @@ export default function GmailPanel() {
     if (isConnected) fetchMessages()
   }, [isConnected]) // eslint-disable-line
 
-  // ─── 메일 본문 조회 ───────────────────────────────────────────────
+  // ─── 메일 본문 조회 + 읽음 처리 ─────────────────────────────────
   const handleSelect = useCallback(async (msg) => {
     setSelected(msg)
     setBody(null)
     setBodyLoading(true)
+
+    // 로컬 상태에서 읽음 처리 (파란 점 제거)
+    if (msg.isUnread) {
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isUnread: false } : m))
+    }
+
     try {
       const token = await ensureToken()
       if (!token) { setBodyLoading(false); return }
