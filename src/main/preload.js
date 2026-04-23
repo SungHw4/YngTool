@@ -28,4 +28,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 설정
   loadConfig: ()       => ipcRenderer.invoke('config:load'),
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
+
+  // Gmail
+  gmailAuth:             (opts) => ipcRenderer.invoke('gmail:auth', opts),
+  gmailRefreshToken:     (opts) => ipcRenderer.invoke('gmail:refresh-token', opts),
+  gmailFetchMessages:    (opts) => ipcRenderer.invoke('gmail:fetch-messages', opts),
+  gmailFetchMessageBody: (opts) => ipcRenderer.invoke('gmail:fetch-message-body', opts),
 })

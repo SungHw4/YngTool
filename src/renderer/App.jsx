@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage'
 import SchedulePage from './pages/SchedulePage'
 import WeeklySummaryPage from './pages/WeeklySummaryPage'
 import NotificationPanel from './components/NotificationPanel'
+import GmailPanel from './components/GmailPanel'
 
 // ─── 상수 ─────────────────────────────────────────────────────────
 const SNAP_THRESHOLD = 14   // px — 이 거리 이내면 스냅
@@ -93,8 +94,9 @@ const NAV_ITEMS = [
   { id: 'status',        ...PANEL_META.status  },
   { id: 'schedule',      icon: '▦', label: '일정표',    page: true },
   { id: 'summary',       icon: '☰', label: '주간 요약', page: true },
-  { id: 'notifications', icon: '◉', label: '알림',      page: true },
-  { id: 'settings',      icon: '⚙', label: '설정',      page: true, bottom: true },
+  { id: 'notifications', icon: '◉', label: '알림',  page: true },
+  { id: 'gmail',         icon: '✉', label: 'Gmail', page: true },
+  { id: 'settings',      icon: '⚙', label: '설정',  page: true, bottom: true },
 ]
 
 const DEFAULT_PANELS = [
@@ -550,6 +552,7 @@ function AppShell() {
       case 'summary':       return <WeeklySummaryPage />
       case 'settings':      return <SettingsPage />
       case 'notifications': return <NotificationPanel />
+      case 'gmail':         return <GmailPanel />
       default:
         return (
           <DashboardCanvas

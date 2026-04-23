@@ -12,6 +12,7 @@ const TYPE_META = {
   jira_status: { icon: '↔', label: '상태 변경',  color: '#f0a04a' },
   jira_comment:{ icon: '◎', label: '업데이트',   color: '#9a9aff' },
   schedule:    { icon: '▦', label: '일정',        color: '#4acf8a' },
+  gmail:       { icon: '✉', label: 'Gmail',       color: '#ea4335' },
 }
 
 export default function NotificationPanel() {

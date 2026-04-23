@@ -5,6 +5,7 @@ export default function SettingsPage() {
   const { state, dispatch } = useApp()
   const [form, setForm] = useState(null)
   const [saved, setSaved] = useState(false)
+  const [gmailStatus, setGmailStatus] = useState('')  // 'connecting' | 'error' | ''
 
   useEffect(() => {
     if (state.config) setForm(JSON.parse(JSON.stringify(state.config)))
@@ -130,6 +131,84 @@ export default function SettingsPage() {
           </Field>
         </Section>
 
+        {/* Gmail */}
+        <Section title="Gmail 설정">
+          <Toggle label="Gmail 활성화" checked={form.gmail?.enabled} onChange={v => set('gmail.enabled', v)} />
+          <Field label="Client ID">
+            <input style={styles.input} value={form.gmail?.clientId || ''}
+              onChange={e => set('gmail.clientId', e.target.value)}
+              placeholder="Google Cloud Console > OAuth2 Client ID"
+            />
+          </Field>
+          <Field label="Client Secret">
+            <input style={styles.input} type="password" value={form.gmail?.clientSecret || ''}
+              onChange={e => set('gmail.clientSecret', e.target.value)}
+              placeholder="Google Cloud Console > Client Secret"
+            />
+          </Field>
+
+          {/* 연결 상태 + 버튼 */}
+          {form.gmail?.refreshToken ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+              <span style={{ fontSize: 12, color: '#4acf8a' }}>
+                ✓ 연결됨{form.gmail?.connectedEmail ? ` · ${form.gmail.connectedEmail}` : ''}
+              </span>
+              <button
+                style={styles.gmailDisconnectBtn}
+                onClick={() => {
+                  set('gmail.accessToken', '')
+                  set('gmail.refreshToken', '')
+                  set('gmail.expiresAt', 0)
+                  set('gmail.connectedEmail', '')
+                }}
+              >연결 해제</button>
+            </div>
+          ) : (
+            <button
+              style={{ ...styles.gmailConnectBtn, opacity: gmailStatus === 'connecting' ? 0.6 : 1 }}
+              disabled={gmailStatus === 'connecting' || !form.gmail?.clientId || !form.gmail?.clientSecret}
+              onClick={async () => {
+                setGmailStatus('connecting')
+                // 먼저 현재 form을 저장해 clientId/Secret이 파일에 남도록
+                const updated = { ...form }
+                await window.electronAPI.saveConfig(updated)
+                dispatch({ type: 'SET_CONFIG', payload: updated })
+
+                const res = await window.electronAPI.gmailAuth({
+                  clientId:     form.gmail.clientId,
+                  clientSecret: form.gmail.clientSecret,
+                })
+                if (res.error) {
+                  setGmailStatus('error:' + res.error)
+                  return
+                }
+                // 연결된 이메일 조회 (선택)
+                let email = ''
+                try {
+                  const profileRes = await window.electronAPI.gmailFetchMessages({
+                    accessToken: res.accessToken, maxResults: 1
+                  })
+                  // 프로필 API가 없으므로 tokeninfo로 email 조회
+                  email = ''  // 생략 (별도 API 필요)
+                } catch {}
+
+                set('gmail.accessToken',  res.accessToken)
+                set('gmail.refreshToken', res.refreshToken)
+                set('gmail.expiresAt',    res.expiresAt)
+                set('gmail.connectedEmail', email)
+                setGmailStatus('')
+              }}
+            >
+              {gmailStatus === 'connecting' ? '브라우저에서 인증 중...' : 'Google 계정 연결'}
+            </button>
+          )}
+          {gmailStatus.startsWith('error:') && (
+            <div style={{ fontSize: 11, color: '#f07', marginTop: 4 }}>
+              오류: {gmailStatus.slice(6)}
+            </div>
+          )}
+        </Section>
+
         {/* AI */}
         <Section title="AI API 설정">
           <Field label="Anthropic API Key (코드 리뷰)">
@@ -205,6 +284,16 @@ const styles = {
     background: '#1a3d5c', border: '1px solid #2a6090',
     borderRadius: 6, color: '#7ac', fontSize: 14,
     cursor: 'pointer', fontWeight: 500,
+  },
+  gmailConnectBtn: {
+    background: '#1a3320', border: '1px solid #2a6040',
+    borderRadius: 4, color: '#4acf8a', fontSize: 12,
+    padding: '5px 14px', cursor: 'pointer', marginTop: 4,
+  },
+  gmailDisconnectBtn: {
+    background: 'none', border: '1px solid #4a2a2a',
+    borderRadius: 4, color: '#a44', fontSize: 11,
+    padding: '3px 10px', cursor: 'pointer',
   },
 }
 

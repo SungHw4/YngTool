@@ -27,6 +27,7 @@ const initialState = {
   notifMeta: {
     jiraSnapshot: {},        // { [issueKey]: { status, updated } }
     notifiedSchedules: [],   // 이미 알림 보낸 일정 id 목록
+    gmailSeenIds: [],        // 이미 알림 보낸 메일 ID 목록 (최대 200개)
   },
   activeTab: 'dashboard',
   codeReview: {
@@ -86,6 +87,7 @@ function reducer(state, action) {
         notifMeta: {
           jiraSnapshot:      action.payload.jiraSnapshot      || {},
           notifiedSchedules: action.payload.notifiedSchedules || [],
+          gmailSeenIds:      action.payload.gmailSeenIds      || [],
         },
       }
     }
@@ -124,6 +126,14 @@ function reducer(state, action) {
           notifiedSchedules: [...state.notifMeta.notifiedSchedules, action.payload],
         },
       }
+
+    case 'ADD_GMAIL_SEEN_IDS': {
+      const merged = [...new Set([...state.notifMeta.gmailSeenIds, ...action.payload])]
+      return {
+        ...state,
+        notifMeta: { ...state.notifMeta, gmailSeenIds: merged.slice(-200) },
+      }
+    }
     // ───────────────────────────────────────────────────────────────
 
     case 'SET_ACTIVE_TAB':
@@ -169,6 +179,7 @@ export function AppProvider({ children }) {
         items:             state.notifications.items,
         jiraSnapshot:      state.notifMeta.jiraSnapshot,
         notifiedSchedules: state.notifMeta.notifiedSchedules,
+        gmailSeenIds:      state.notifMeta.gmailSeenIds,
       })
     }, 2000)
     return () => clearTimeout(notifSaveTimerRef.current)
@@ -361,6 +372,62 @@ export function AppProvider({ children }) {
     const timer = setInterval(checkSchedule, 60 * 1000)
     return () => clearInterval(timer)
   }, []) // eslint-disable-line
+
+  // ─── Gmail 새 메일 알림 체크 (5분마다) ──────────────────────────
+  useEffect(() => {
+    const checkGmail = async () => {
+      const gmail = state.config?.gmail
+      if (!gmail?.enabled || !gmail?.refreshToken) return
+
+      try {
+        // 토큰 유효성 확인 및 갱신
+        let accessToken = gmail.accessToken
+        if (!accessToken || !gmail.expiresAt || Date.now() >= gmail.expiresAt) {
+          const refreshRes = await window.electronAPI.gmailRefreshToken({
+            clientId:     gmail.clientId,
+            clientSecret: gmail.clientSecret,
+            refreshToken: gmail.refreshToken,
+          })
+          if (refreshRes.error) return
+          accessToken = refreshRes.accessToken
+          const updated = {
+            ...state.config,
+            gmail: { ...gmail, accessToken: refreshRes.accessToken, expiresAt: refreshRes.expiresAt },
+          }
+          await window.electronAPI.saveConfig(updated)
+          dispatch({ type: 'SET_CONFIG', payload: updated })
+        }
+
+        const res = await window.electronAPI.gmailFetchMessages({ accessToken, maxResults: 10 })
+        if (res.error || !res.items) return
+
+        const seenIds = notifMetaRef.current.gmailSeenIds
+        const newUnread = res.items.filter(m => m.isUnread && !seenIds.includes(m.id))
+
+        for (const mail of newUnread) {
+          _addNotif(dispatch, {
+            id:    `gmail_${mail.id}`,
+            type:  'gmail',
+            title: `새 메일: ${mail.subject}`,
+            body:  mail.from,
+            source: 'gmail',
+          })
+        }
+
+        if (newUnread.length > 0) {
+          dispatch({ type: 'ADD_GMAIL_SEEN_IDS', payload: newUnread.map(m => m.id) })
+        }
+      } catch (e) {
+        console.error('[Gmail check]', e)
+      }
+    }
+
+    if (state.config) {
+      checkGmail()
+      const timer = setInterval(checkGmail, 5 * 60 * 1000)
+      return () => clearInterval(timer)
+    }
+  }, [state.config?.gmail?.enabled, state.config?.gmail?.refreshToken]) // eslint-disable-line
 
   const value = { state, dispatch, fetchIssues, fetchCommits, checkConnections }
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
