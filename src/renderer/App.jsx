@@ -11,6 +11,8 @@ import WeeklySummaryPage from './pages/WeeklySummaryPage'
 import NotificationPanel from './components/NotificationPanel'
 import GmailPanel from './components/GmailPanel'
 import GmailPreviewPanel from './components/GmailPreviewPanel'
+import SchedulePreviewPanel from './components/SchedulePreviewPanel'
+import WeeklySummaryPreviewPanel from './components/WeeklySummaryPreviewPanel'
 
 // 패널에서 페이지 이동에 사용할 Context
 export const NavContext = createContext(null)
@@ -89,7 +91,9 @@ const PANEL_META = {
   issues:        { icon: '◈', label: '이슈',            hint: '' },
   tokens:        { icon: '◉', label: 'AI 사용량',      hint: '' },
   status:        { icon: '◎', label: '연결 상태',      hint: '' },
-  'gmail-preview': { icon: '✉', label: 'Gmail 미리보기', hint: '클릭 → Gmail 탭 이동' },
+  'gmail-preview':    { icon: '✉', label: 'Gmail 미리보기',  hint: '클릭 → Gmail 탭 이동' },
+  'schedule-preview': { icon: '▦', label: '일정표 미리보기', hint: '클릭 → 일정표 이동' },
+  'summary-preview':  { icon: '☰', label: '주간 요약',       hint: '클릭 → 주간 요약 이동' },
 }
 
 const NAV_ITEMS = [
@@ -97,7 +101,9 @@ const NAV_ITEMS = [
   { id: 'issues',          ...PANEL_META.issues           },
   { id: 'tokens',          ...PANEL_META.tokens           },
   { id: 'status',          ...PANEL_META.status           },
-  { id: 'gmail-preview',   ...PANEL_META['gmail-preview'] },
+  { id: 'gmail-preview',     ...PANEL_META['gmail-preview']    },
+  { id: 'schedule-preview', ...PANEL_META['schedule-preview'] },
+  { id: 'summary-preview',  ...PANEL_META['summary-preview']  },
   { id: 'schedule',      icon: '▦', label: '일정표',    page: true },
   { id: 'summary',       icon: '☰', label: '주간 요약', page: true },
   { id: 'notifications', icon: '◉', label: '알림',  page: true },
@@ -119,7 +125,9 @@ const PanelContent = memo(function PanelContent({ id }) {
     case 'issues':        return <IssuePanel />
     case 'tokens':        return <TokenUsagePanel />
     case 'status':        return <StatusPanel />
-    case 'gmail-preview': return <GmailPreviewPanel />
+    case 'gmail-preview':    return <GmailPreviewPanel />
+    case 'schedule-preview': return <SchedulePreviewPanel />
+    case 'summary-preview':  return <WeeklySummaryPreviewPanel />
     default: return null
   }
 })

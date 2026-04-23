@@ -38,6 +38,22 @@ export class MantisProvider extends IssueProvider {
     return (data.issues || []).map(issue => this._normalize(issue))
   }
 
+  async getResolvedThisWeek(startDate) {
+    // 이번 주 해결/완료된 이슈 (status: resolved=80, closed=90)
+    try {
+      const url = `${this.baseUrl}/api/rest/issues?assigned_to=me&status[]=80&status[]=90&page_size=50`
+      const res = await fetch(url, { headers: this.headers })
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data.issues || [])
+        .filter(i => {
+          const updated = i.updated_at || i.created_at || ''
+          return updated >= startDate
+        })
+        .map(i => this._normalize(i))
+    } catch { return [] }
+  }
+
   async getIssueDetail(id) {
     const res = await fetch(`${this.baseUrl}/api/rest/issues/${id}`, { headers: this.headers })
     if (!res.ok) throw new Error(`Mantis API error: ${res.status}`)
@@ -91,6 +107,20 @@ export class JiraProvider extends IssueProvider {
     if (!res.ok) throw new Error(`Jira API error: ${res.status}`)
     const data = await res.json()
     return (data.issues || []).map(issue => this._normalize(issue))
+  }
+
+  async getResolvedThisWeek(startDate) {
+    // 이번 주 해결된 이슈 (resolution != Unresolved AND resolutiondate >= startDate)
+    try {
+      const jql = encodeURIComponent(
+        `assignee = currentUser() AND resolution != Unresolved AND resolutiondate >= "${startDate}" ORDER BY resolutiondate DESC`
+      )
+      const url = `${this.baseUrl}/rest/api/3/search?jql=${jql}&maxResults=50&fields=summary,status,priority,issuetype,updated,resolutiondate`
+      const res = await fetch(url, { headers: this.headers })
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data.issues || []).map(issue => this._normalize(issue))
+    } catch { return [] }
   }
 
   async getIssueDetail(id) {
