@@ -220,13 +220,44 @@ const FloatingPanel = memo(function FloatingPanel({
 })
 
 // ─── 대시보드 캔버스 ──────────────────────────────────────────────
+// ─── 레이아웃 영속화 헬퍼 ────────────────────────────────────────
+const LAYOUT_KEY = 'yngtool-panel-layout-v1'
+
+function loadSavedLayout() {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY)
+    if (!raw) return null
+    const { panels, zOrder } = JSON.parse(raw)
+    // 현재 유효한 패널 ID만 허용
+    const validIds = new Set(Object.keys(PANEL_META))
+    return {
+      panels: panels.filter(p => validIds.has(p.id)),
+      zOrder: zOrder.filter(id => validIds.has(id)),
+    }
+  } catch { return null }
+}
+
+function persistLayout(panels, zOrder) {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ panels, zOrder })) } catch {}
+}
+
 function DashboardCanvas({ onReady, onPanelIdsChange }) {
-  const [panels,     setPanels    ] = useState(DEFAULT_PANELS)
-  const [zOrder,     setZOrder    ] = useState(DEFAULT_PANELS.map(p => p.id))
+  const saved = useRef(loadSavedLayout())  // 최초 1회만 읽음
+
+  const [panels,     setPanels    ] = useState(() => saved.current?.panels ?? DEFAULT_PANELS)
+  const [zOrder,     setZOrder    ] = useState(() => saved.current?.zOrder ?? DEFAULT_PANELS.map(p => p.id))
   const [snapGuides, setSnapGuides] = useState([])
 
-  const canvasRef = useRef(null)
-  const dragRef   = useRef(null)    // { panelId, offsetX, offsetY }
+  const canvasRef  = useRef(null)
+  const dragRef    = useRef(null)   // { panelId, offsetX, offsetY }
+  const saveTimer  = useRef(null)   // 레이아웃 저장 디바운스
+
+  // 패널 이동/리사이즈/추가/삭제 시 500ms 디바운스로 저장
+  useEffect(() => {
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => persistLayout(panels, zOrder), 500)
+    return () => clearTimeout(saveTimer.current)
+  }, [panels, zOrder])
 
   // 외부(사이드바)에서 addPanel을 호출할 수 있도록 ref 등록
   const addPanelRef = useRef(null)
