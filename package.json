@@ -1,6 +1,6 @@
 {
   "name": "yngtool",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "개인 개발자 업무 대시보드",
   "main": "src/main/main.js",
   "scripts": {
