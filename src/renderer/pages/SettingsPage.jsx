@@ -5,7 +5,8 @@ export default function SettingsPage() {
   const { state, dispatch } = useApp()
   const [form, setForm] = useState(null)
   const [saved, setSaved] = useState(false)
-  const [gmailStatus, setGmailStatus] = useState('')  // 'connecting' | 'error' | ''
+  const [gmailStatus, setGmailStatus] = useState('')  // 'connecting' | 'error:...' | ''
+  const [gcalStatus,  setGcalStatus ] = useState('')  // 'connecting' | 'error:...' | ''
 
   useEffect(() => {
     if (state.config) setForm(JSON.parse(JSON.stringify(state.config)))
@@ -209,6 +210,93 @@ export default function SettingsPage() {
           )}
         </Section>
 
+        {/* Google Calendar */}
+        <Section title="Google Calendar 설정">
+          <Toggle label="Google Calendar 활성화" checked={form.gcal?.enabled} onChange={v => set('gcal.enabled', v)} />
+
+          {/* Gmail OAuth 자격증명 복사 안내 */}
+          {form.gmail?.clientId && !form.gcal?.clientId && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: '#556' }}>Gmail과 동일한 OAuth 앱을 사용할 수 있습니다</span>
+              <button
+                style={styles.addBtn}
+                onClick={() => {
+                  set('gcal.clientId',     form.gmail.clientId)
+                  set('gcal.clientSecret', form.gmail.clientSecret)
+                }}
+              >
+                Gmail에서 복사
+              </button>
+            </div>
+          )}
+
+          <Field label="Client ID">
+            <input style={styles.input} value={form.gcal?.clientId || ''}
+              onChange={e => set('gcal.clientId', e.target.value)}
+              placeholder="Google Cloud Console > OAuth2 Client ID"
+            />
+          </Field>
+          <Field label="Client Secret">
+            <input style={styles.input} type="password" value={form.gcal?.clientSecret || ''}
+              onChange={e => set('gcal.clientSecret', e.target.value)}
+              placeholder="Google Cloud Console > Client Secret"
+            />
+          </Field>
+
+          {/* 연결 상태 */}
+          {form.gcal?.refreshToken ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+              <span style={{ fontSize: 12, color: '#4acf8a' }}>
+                ✓ 연결됨{form.gcal?.connectedEmail ? ` · ${form.gcal.connectedEmail}` : ''}
+              </span>
+              <button
+                style={styles.gmailDisconnectBtn}
+                onClick={() => {
+                  set('gcal.accessToken', '')
+                  set('gcal.refreshToken', '')
+                  set('gcal.expiresAt', 0)
+                  set('gcal.connectedEmail', '')
+                }}
+              >연결 해제</button>
+            </div>
+          ) : (
+            <button
+              style={{ ...styles.gmailConnectBtn, opacity: gcalStatus === 'connecting' ? 0.6 : 1 }}
+              disabled={gcalStatus === 'connecting' || !form.gcal?.clientId || !form.gcal?.clientSecret}
+              onClick={async () => {
+                setGcalStatus('connecting')
+                const updated = { ...form }
+                await window.electronAPI.saveConfig(updated)
+                dispatch({ type: 'SET_CONFIG', payload: updated })
+
+                const res = await window.electronAPI.gcalAuth({
+                  clientId:     form.gcal.clientId,
+                  clientSecret: form.gcal.clientSecret,
+                })
+                if (res.error) { setGcalStatus('error:' + res.error); return }
+
+                set('gcal.accessToken',  res.accessToken)
+                set('gcal.refreshToken', res.refreshToken)
+                set('gcal.expiresAt',    res.expiresAt)
+                setGcalStatus('')
+              }}
+            >
+              {gcalStatus === 'connecting' ? '브라우저에서 인증 중...' : 'Google 계정 연결'}
+            </button>
+          )}
+          {gcalStatus.startsWith('error:') && (
+            <div style={{ fontSize: 11, color: '#f07', marginTop: 4 }}>
+              오류: {gcalStatus.slice(6)}
+            </div>
+          )}
+
+          {/* Google Cloud Console 설정 안내 */}
+          <div style={styles.hint}>
+            Google Cloud Console에서 <b>Google Calendar API</b>를 활성화하고,<br />
+            OAuth 리디렉션 URI에 <code style={styles.code}>http://localhost</code> (포트 제외)를 추가하세요.
+          </div>
+        </Section>
+
         {/* AI */}
         <Section title="AI API 설정">
           <Field label="Anthropic API Key (코드 리뷰)">
@@ -294,6 +382,16 @@ const styles = {
     background: 'none', border: '1px solid #4a2a2a',
     borderRadius: 4, color: '#a44', fontSize: 11,
     padding: '3px 10px', cursor: 'pointer',
+  },
+  hint: {
+    fontSize: 11, color: '#445', lineHeight: 1.6,
+    marginTop: 8, padding: '8px 10px',
+    background: '#0f1118', borderRadius: 4,
+    border: '1px solid #1e2130',
+  },
+  code: {
+    fontFamily: 'monospace', fontSize: 11,
+    background: '#1a1e2a', padding: '1px 4px', borderRadius: 3, color: '#7a9aba',
   },
 }
 

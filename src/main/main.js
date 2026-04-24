@@ -200,6 +200,10 @@ function getDefaultConfig() {
       enabled: false, clientId: '', clientSecret: '',
       accessToken: '', refreshToken: '', expiresAt: 0, connectedEmail: '',
     },
+    gcal: {
+      enabled: false, clientId: '', clientSecret: '',
+      accessToken: '', refreshToken: '', expiresAt: 0, connectedEmail: '',
+    },
     general: { pollIntervalMinutes: 5, theme: 'dark' },
   }
 }
@@ -266,8 +270,9 @@ function gmailApiGet(path, accessToken) {
   })
 }
 
-// Gmail OAuth2 인증: 로컬 서버로 code 캡처 → 토큰 교환까지 한 번에 처리
-ipcMain.handle('gmail:auth', async (_, { clientId, clientSecret }) => {
+// ─── Google OAuth2 공통 헬퍼 ─────────────────────────────────────
+// scope만 다르고 나머지 흐름은 Gmail·Calendar 동일
+function googleOAuthFlow(clientId, clientSecret, scope) {
   const http_local = require('http')
   return new Promise((resolve) => {
     let handled = false
@@ -275,9 +280,7 @@ ipcMain.handle('gmail:auth', async (_, { clientId, clientSecret }) => {
     let timeoutId = null
 
     const server = http_local.createServer((req, res) => {
-      // favicon 등 2차 요청 무시
       if (handled) { res.writeHead(204); res.end(); return }
-
       try {
         const urlObj = new URL(req.url, 'http://localhost')
         const code   = urlObj.searchParams.get('code')
@@ -301,7 +304,6 @@ ipcMain.handle('gmail:auth', async (_, { clientId, clientSecret }) => {
         res.end(html('✓ 인증 완료! YngTool 창으로 돌아가세요.'))
         handled = true; clearTimeout(timeoutId); server.close()
 
-        // code → tokens 교환
         const redirectUri = `http://localhost:${port}`
         const body = new URLSearchParams({
           code, client_id: clientId, client_secret: clientSecret,
@@ -341,7 +343,6 @@ ipcMain.handle('gmail:auth', async (_, { clientId, clientSecret }) => {
 
     server.listen(0, '127.0.0.1', () => {
       port = server.address().port
-      const scope = 'https://www.googleapis.com/auth/gmail.readonly'
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.searchParams.set('client_id', clientId)
       authUrl.searchParams.set('redirect_uri', `http://localhost:${port}`)
@@ -357,16 +358,15 @@ ipcMain.handle('gmail:auth', async (_, { clientId, clientSecret }) => {
       }, 5 * 60 * 1000)
     })
   })
-})
+}
 
-// 액세스 토큰 갱신
-ipcMain.handle('gmail:refresh-token', async (_, { clientId, clientSecret, refreshToken }) => {
+// Google 토큰 갱신 공통 헬퍼
+function googleRefreshToken(clientId, clientSecret, refreshToken) {
   return new Promise((resolve) => {
     const body = new URLSearchParams({
       client_id: clientId, client_secret: clientSecret,
       refresh_token: refreshToken, grant_type: 'refresh_token',
     }).toString()
-
     const req = https.request({
       hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST',
       headers: {
@@ -390,7 +390,25 @@ ipcMain.handle('gmail:refresh-token', async (_, { clientId, clientSecret, refres
     req.on('error', (e) => resolve({ error: e.message }))
     req.write(body); req.end()
   })
-})
+}
+
+// Gmail OAuth2 인증
+ipcMain.handle('gmail:auth', async (_, { clientId, clientSecret }) =>
+  googleOAuthFlow(clientId, clientSecret, 'https://www.googleapis.com/auth/gmail.readonly')
+)
+
+// Google Calendar OAuth2 인증
+ipcMain.handle('gcal:auth', async (_, { clientId, clientSecret }) =>
+  googleOAuthFlow(clientId, clientSecret, 'https://www.googleapis.com/auth/calendar.readonly')
+)
+
+// 액세스 토큰 갱신 (Gmail / Google Calendar 공용)
+ipcMain.handle('gmail:refresh-token', async (_, { clientId, clientSecret, refreshToken }) =>
+  googleRefreshToken(clientId, clientSecret, refreshToken)
+)
+ipcMain.handle('gcal:refresh-token', async (_, { clientId, clientSecret, refreshToken }) =>
+  googleRefreshToken(clientId, clientSecret, refreshToken)
+)
 
 // 메일 목록 조회 (metadata: 제목/발신자/날짜/읽음 여부)
 ipcMain.handle('gmail:fetch-messages', async (_, { accessToken, maxResults = 20 }) => {
@@ -425,6 +443,67 @@ ipcMain.handle('gmail:fetch-messages', async (_, { accessToken, maxResults = 20 
         isUnread: (msg.labelIds || []).includes('UNREAD'),
       }
     }).filter(Boolean)
+
+    return { items }
+  } catch (e) {
+    return { error: e.message, items: [] }
+  }
+})
+
+// ─── IPC: Google Calendar ────────────────────────────────────────
+function gcalApiGet(path, accessToken) {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'www.googleapis.com',
+      path: `/calendar/v3/${path}`,
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 10000,
+    }
+    const req = https.get(options, (res) => {
+      let data = ''
+      res.on('data', c => (data += c))
+      res.on('end', () => {
+        try {
+          if (res.statusCode === 401) return resolve({ error: 'unauthorized' })
+          if (res.statusCode !== 200) return resolve({ error: `HTTP ${res.statusCode}` })
+          resolve({ data: JSON.parse(data) })
+        } catch { resolve({ error: 'parse error' }) }
+      })
+    })
+    req.on('error', (e) => resolve({ error: e.message }))
+    req.on('timeout', () => { req.destroy(); resolve({ error: 'timeout' }) })
+  })
+}
+
+// 캘린더 이벤트 조회
+ipcMain.handle('gcal:fetch-events', async (_, { accessToken, timeMin, timeMax }) => {
+  try {
+    const params = new URLSearchParams({
+      timeMin, timeMax,
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '100',
+    }).toString()
+
+    const res = await gcalApiGet(`calendars/primary/events?${params}`, accessToken)
+    if (res.error) return { error: res.error, items: [] }
+
+    const items = (res.data.items || []).map(event => {
+      const startRaw = event.start?.dateTime || event.start?.date || ''
+      const endRaw   = event.end?.dateTime   || event.end?.date   || ''
+      const allDay   = !event.start?.dateTime
+      return {
+        id:      `gcal-${event.id}`,
+        title:   event.summary || '(제목 없음)',
+        date:    startRaw.slice(0, 10),
+        endDate: endRaw.slice(0, 10),
+        time:    allDay ? null : startRaw.slice(11, 16),
+        allDay,
+        location: event.location || '',
+        colorId:  event.colorId  || null,
+        isGcal:   true,
+      }
+    })
 
     return { items }
   } catch (e) {

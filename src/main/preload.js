@@ -34,4 +34,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gmailRefreshToken:     (opts) => ipcRenderer.invoke('gmail:refresh-token', opts),
   gmailFetchMessages:    (opts) => ipcRenderer.invoke('gmail:fetch-messages', opts),
   gmailFetchMessageBody: (opts) => ipcRenderer.invoke('gmail:fetch-message-body', opts),
+
+  // Google Calendar
+  gcalAuth:         (opts) => ipcRenderer.invoke('gcal:auth', opts),
+  gcalRefreshToken: (opts) => ipcRenderer.invoke('gcal:refresh-token', opts),
+  gcalFetchEvents:  (opts) => ipcRenderer.invoke('gcal:fetch-events', opts),
 })

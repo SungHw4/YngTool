@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useApp } from '../store/AppContext'
 
 const STORAGE_KEY = 'devdash-schedule-v1'
 
@@ -69,27 +70,41 @@ function getMonthGrid(year, month) {
   })
 }
 
+// gcal 이벤트가 dateStr에 해당하는지 (다일 이벤트 포함)
+// Google Calendar 종일 이벤트의 endDate는 exclusive(다음날)이므로 < 비교
+function matchesGcalDate(event, dateStr) {
+  if (!event.endDate || event.endDate <= event.date) return event.date === dateStr
+  return event.date <= dateStr && dateStr < event.endDate
+}
+
 // ─── ItemChip ────────────────────────────────────────────────────
 function ItemChip({ item, onClick, compact = false }) {
+  const isGcal = !!item.isGcal
   return (
     <div
-      onClick={onClick}
+      onClick={isGcal ? undefined : onClick}
+      title={isGcal ? `Google Calendar: ${item.title}${item.location ? '\n📍 ' + item.location : ''}` : item.title}
       style={{
-        background: COLORS[item.color] || COLORS[0],
+        background: isGcal ? '#162040' : (COLORS[item.color] || COLORS[0]),
+        borderLeft: isGcal ? '2px solid #4285f4' : 'none',
         borderRadius: 3,
         padding: compact ? '1px 5px' : '3px 6px',
         display: 'flex', alignItems: 'center', gap: 3,
-        cursor: 'pointer', overflow: 'hidden',
+        cursor: isGcal ? 'default' : 'pointer',
+        overflow: 'hidden', opacity: isGcal ? 0.9 : 1,
       }}
     >
-      {item.routine && (
+      {isGcal && (
+        <span style={{ fontSize: 8, color: '#4285f4', flexShrink: 0, fontWeight: 700 }}>G</span>
+      )}
+      {!isGcal && item.routine && (
         <span style={{ fontSize: 8, color: '#aaa', flexShrink: 0 }}>↻</span>
       )}
-      {!item.allDay && (
-        <span style={{ fontSize: 9, color: '#aaa', flexShrink: 0 }}>{item.time}</span>
+      {!item.allDay && item.time && (
+        <span style={{ fontSize: 9, color: isGcal ? '#7aabde' : '#aaa', flexShrink: 0 }}>{item.time}</span>
       )}
       <span style={{
-        fontSize: compact ? 10 : 11, color: '#ddd',
+        fontSize: compact ? 10 : 11, color: isGcal ? '#90b8e8' : '#ddd',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {item.title}
@@ -99,14 +114,16 @@ function ItemChip({ item, onClick, compact = false }) {
 }
 
 // ─── WeekView ────────────────────────────────────────────────────
-function WeekView({ baseDate, items, today, onDayClick, onItemClick }) {
+function WeekView({ baseDate, items, gcalItems, today, onDayClick, onItemClick }) {
   const weekDays = getWeekDays(baseDate)
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1, overflow: 'hidden' }}>
       {weekDays.map((day, di) => {
-        const dateStr  = fmt(day)
-        const dayItems = getItemsForDate(items, dateStr)
-        const isToday  = dateStr === today
+        const dateStr   = fmt(day)
+        const localItems = getItemsForDate(items, dateStr)
+        const dayGcal   = gcalItems.filter(e => matchesGcalDate(e, dateStr))
+        const dayItems  = [...localItems, ...dayGcal]
+        const isToday   = dateStr === today
         const dow      = day.getDay()
         const color    = isToday ? '#7ac' : dow === 0 ? '#c07070' : dow === 6 ? '#7090c0' : '#888'
 
@@ -135,7 +152,7 @@ function WeekView({ baseDate, items, today, onDayClick, onItemClick }) {
                 <ItemChip
                   key={item.id ?? ii}
                   item={item}
-                  onClick={(e) => { e.stopPropagation(); onItemClick(items.indexOf(item)) }}
+                  onClick={item.isGcal ? undefined : (e) => { e.stopPropagation(); onItemClick(items.indexOf(item)) }}
                 />
               ))}
             </div>
@@ -147,7 +164,7 @@ function WeekView({ baseDate, items, today, onDayClick, onItemClick }) {
 }
 
 // ─── MonthView ───────────────────────────────────────────────────
-function MonthView({ baseDate, items, today, onDayClick, onItemClick }) {
+function MonthView({ baseDate, items, gcalItems, today, onDayClick, onItemClick }) {
   const year  = baseDate.getFullYear()
   const month = baseDate.getMonth()
   const grid  = getMonthGrid(year, month)
@@ -176,7 +193,9 @@ function MonthView({ baseDate, items, today, onDayClick, onItemClick }) {
           const isCurrentMonth = day.getMonth() === month
           const isToday        = dateStr === today
           const dow            = day.getDay()
-          const dayItems       = getItemsForDate(items, dateStr)
+          const localItems     = getItemsForDate(items, dateStr)
+          const dayGcal        = gcalItems.filter(e => matchesGcalDate(e, dateStr))
+          const dayItems       = [...localItems, ...dayGcal]
           const numColor       = isToday ? '#7ac' : dow === 0 ? '#c07070' : dow === 6 ? '#7090c0' : '#778'
 
           return (
@@ -205,7 +224,7 @@ function MonthView({ baseDate, items, today, onDayClick, onItemClick }) {
                     key={item.id ?? ii}
                     item={item}
                     compact
-                    onClick={(e) => { e.stopPropagation(); onItemClick(items.indexOf(item)) }}
+                    onClick={item.isGcal ? undefined : (e) => { e.stopPropagation(); onItemClick(items.indexOf(item)) }}
                   />
                 ))}
                 {dayItems.length > 3 && (
@@ -382,15 +401,75 @@ const EMPTY_FORM = {
 }
 
 export default function SchedulePage() {
-  const [view,     setView    ] = useState('week')   // 'week' | 'month'
-  const [baseDate, setBaseDate] = useState(new Date())
-  const [items,    setItems   ] = useState(loadItems)
-  const [modal,    setModal   ] = useState(null)     // { date? } | { itemIdx }
-  const [form,     setForm    ] = useState(EMPTY_FORM)
+  const { state, dispatch } = useApp()
+  const [view,      setView     ] = useState('week')   // 'week' | 'month'
+  const [baseDate,  setBaseDate ] = useState(new Date())
+  const [items,     setItems    ] = useState(loadItems)
+  const [modal,     setModal    ] = useState(null)     // { date? } | { itemIdx }
+  const [form,      setForm     ] = useState(EMPTY_FORM)
+  const [gcalItems, setGcalItems] = useState([])
+  const [gcalError, setGcalError] = useState('')
 
   const today = fmt(new Date())
   const setF  = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const persist = (next) => { setItems(next); saveItems(next) }
+
+  // ── Google Calendar 토큰 갱신 ──────────────────────────────────
+  const gcal = state.config?.gcal
+  const ensureGcalToken = useCallback(async () => {
+    if (!gcal?.refreshToken) return null
+    if (gcal.accessToken && gcal.expiresAt && Date.now() < gcal.expiresAt) return gcal.accessToken
+    const res = await window.electronAPI.gcalRefreshToken({
+      clientId:     gcal.clientId,
+      clientSecret: gcal.clientSecret,
+      refreshToken: gcal.refreshToken,
+    })
+    if (res.error) return null
+    const updated = { ...state.config, gcal: { ...gcal, accessToken: res.accessToken, expiresAt: res.expiresAt } }
+    await window.electronAPI.saveConfig(updated)
+    dispatch({ type: 'SET_CONFIG', payload: updated })
+    return res.accessToken
+  }, [gcal, state.config, dispatch])
+
+  // ── Google Calendar 이벤트 fetch ───────────────────────────────
+  const fetchGcalEvents = useCallback(async () => {
+    if (!gcal?.enabled || !gcal?.refreshToken) return
+    try {
+      const token = await ensureGcalToken()
+      if (!token) { setGcalError('토큰 갱신 실패'); return }
+
+      // 현재 뷰 범위 계산
+      let rangeStart, rangeEnd
+      if (view === 'week') {
+        const days = getWeekDays(baseDate)
+        rangeStart = new Date(days[0]); rangeStart.setHours(0, 0, 0, 0)
+        rangeEnd   = new Date(days[6]); rangeEnd.setHours(23, 59, 59, 999)
+      } else {
+        const grid = getMonthGrid(baseDate.getFullYear(), baseDate.getMonth())
+        rangeStart = new Date(grid[0]);  rangeStart.setHours(0, 0, 0, 0)
+        rangeEnd   = new Date(grid[41]); rangeEnd.setHours(23, 59, 59, 999)
+      }
+
+      const res = await window.electronAPI.gcalFetchEvents({
+        accessToken: token,
+        timeMin: rangeStart.toISOString(),
+        timeMax: rangeEnd.toISOString(),
+      })
+      if (res.error) { setGcalError(res.error); return }
+      setGcalItems(res.items || [])
+      setGcalError('')
+    } catch (e) {
+      setGcalError(e.message)
+    }
+  }, [gcal, ensureGcalToken, view, baseDate])
+
+  // 뷰/날짜 변경 시 gcal 이벤트 재조회
+  const fetchTimerRef = useRef(null)
+  useEffect(() => {
+    clearTimeout(fetchTimerRef.current)
+    fetchTimerRef.current = setTimeout(fetchGcalEvents, 100)
+    return () => clearTimeout(fetchTimerRef.current)
+  }, [fetchGcalEvents])
 
   const openNew = (dateStr) => {
     const dom = new Date(dateStr).getDate()
@@ -494,12 +573,23 @@ export default function SchedulePage() {
         <span style={s.periodLabel}>{periodLabel}</span>
         <button style={s.navBtn} onClick={next}>›</button>
         <button style={s.todayBtn} onClick={() => setBaseDate(new Date())}>오늘</button>
+
+        {/* Google Calendar 연동 상태 */}
+        {gcal?.enabled && gcal?.refreshToken && (
+          <div style={s.gcalBadge} title={gcalError || 'Google Calendar 연동 중'}>
+            <span style={{ color: gcalError ? '#e06060' : '#4285f4' }}>G</span>
+            {gcalError
+              ? <span style={{ color: '#e06060' }}>오류</span>
+              : <span style={{ color: '#4a6a8a' }}>{gcalItems.length}개</span>
+            }
+          </div>
+        )}
       </div>
 
       {/* 뷰 렌더 */}
       {view === 'week'
-        ? <WeekView  baseDate={baseDate} items={items} today={today} onDayClick={openNew} onItemClick={openEdit} />
-        : <MonthView baseDate={baseDate} items={items} today={today} onDayClick={openNew} onItemClick={openEdit} />
+        ? <WeekView  baseDate={baseDate} items={items} gcalItems={gcalItems} today={today} onDayClick={openNew} onItemClick={openEdit} />
+        : <MonthView baseDate={baseDate} items={items} gcalItems={gcalItems} today={today} onDayClick={openNew} onItemClick={openEdit} />
       }
 
       {/* 모달 */}
@@ -538,6 +628,12 @@ const s = {
   todayBtn: {
     marginLeft: 'auto', background: 'none', border: '1px solid #252a38',
     borderRadius: 4, color: '#667', fontSize: 11, padding: '3px 10px', cursor: 'pointer',
+  },
+  gcalBadge: {
+    display: 'flex', alignItems: 'center', gap: 4,
+    fontSize: 10, padding: '2px 8px',
+    background: '#0f1520', border: '1px solid #1e2a3a',
+    borderRadius: 10,
   },
 
   // 모달
